@@ -6,7 +6,8 @@ NoteFinder is a small Python command-line app for finding information in local n
 
 - Choose a folder that contains notes
 - Choose a folder containing notes
-- Find `.txt` and `.md` files, including in subfolders
+- Find `.txt` and `.md` files, including in subfolders 
+- Store note file paths and contents in a local SQLite database
 
 ## Run the app
 
