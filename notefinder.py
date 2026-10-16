@@ -22,8 +22,9 @@ def choose_folder():
         print("Please enter a folder path, not a file path.")
         return None
 
-    print(f"Folder selected: {folder.resolve()}")
-    return folder.resolve()
+    folder = folder.resolve()
+    print(f"Folder selected: {folder}")
+    return folder
 
 
 def create_database():
@@ -49,7 +50,7 @@ def find_note_files(folder):
     return sorted(note_files, key=lambda path: str(path).lower())
 
 
-def scan_and_save_folder(folder):
+def index_folder(folder):
     note_files = find_note_files(folder)
 
     if not note_files:
@@ -63,6 +64,7 @@ def scan_and_save_folder(folder):
         for path in note_files:
             try:
                 content = path.read_text(encoding="utf-8")
+
                 connection.execute(
                     """
                     INSERT OR REPLACE INTO documents (path, content)
@@ -71,12 +73,13 @@ def scan_and_save_folder(folder):
                     (str(path.resolve()), content)
                 )
                 saved_count += 1
+
             except (OSError, UnicodeError) as error:
                 print(f"Skipped {path.name}: {error}")
                 skipped_count += 1
 
     print(f"\nFound {len(note_files)} note file(s).")
-    print(f"Saved {saved_count} file(s) to the SQLite database.")
+    print(f"Added or refreshed {saved_count} file(s) in the database.")
     if skipped_count:
         print(f"Skipped {skipped_count} file(s).")
 
@@ -88,21 +91,24 @@ def main():
     while True:
         print("\n--- NoteFinder ---")
         print("1. Choose notes folder")
-        print("2. Scan folder and save notes")
+        print("2. Index or refresh selected folder")
         print("3. Exit")
 
         choice = input("Choose an option: ").strip()
 
         if choice == "1":
             selected_folder = choose_folder()
+
         elif choice == "2":
             if selected_folder is None:
                 print("Choose a folder first.")
             else:
-                scan_and_save_folder(selected_folder)
+                index_folder(selected_folder)
+
         elif choice == "3":
             print("Goodbye!")
             break
+
         else:
             print("Please choose 1, 2, or 3.")
 
