@@ -64,7 +64,6 @@ def index_folder(folder):
         for path in note_files:
             try:
                 content = path.read_text(encoding="utf-8")
-
                 connection.execute(
                     """
                     INSERT OR REPLACE INTO documents (path, content)
@@ -73,7 +72,6 @@ def index_folder(folder):
                     (str(path.resolve()), content)
                 )
                 saved_count += 1
-
             except (OSError, UnicodeError) as error:
                 print(f"Skipped {path.name}: {error}")
                 skipped_count += 1
@@ -84,6 +82,34 @@ def index_folder(folder):
         print(f"Skipped {skipped_count} file(s).")
 
 
+def search_documents():
+    query = input("Enter a word or phrase to search for: ").strip()
+
+    if not query:
+        print("Search text cannot be empty.")
+        return
+
+    search_text = query.casefold()
+
+    with sqlite3.connect(DATABASE_FILE) as connection:
+        documents = connection.execute(
+            "SELECT path, content FROM documents"
+        ).fetchall()
+
+    matches = [
+        path for path, content in documents
+        if search_text in content.casefold()
+    ]
+
+    if not matches:
+        print(f'No indexed documents contain "{query}".')
+        return
+
+    print(f'\nFound "{query}" in {len(matches)} document(s):')
+    for path in matches:
+        print(f"- {path}")
+
+
 def main():
     create_database()
     selected_folder = None
@@ -92,25 +118,25 @@ def main():
         print("\n--- NoteFinder ---")
         print("1. Choose notes folder")
         print("2. Index or refresh selected folder")
-        print("3. Exit")
+        print("3. Search indexed notes")
+        print("4. Exit")
 
         choice = input("Choose an option: ").strip()
 
         if choice == "1":
             selected_folder = choose_folder()
-
         elif choice == "2":
             if selected_folder is None:
                 print("Choose a folder first.")
             else:
                 index_folder(selected_folder)
-
         elif choice == "3":
+            search_documents()
+        elif choice == "4":
             print("Goodbye!")
             break
-
         else:
-            print("Please choose 1, 2, or 3.")
+            print("Please choose 1, 2, 3, or 4.")
 
 
 if __name__ == "__main__":
