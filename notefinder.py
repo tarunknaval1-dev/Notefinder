@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from pathlib import Path
 
@@ -82,6 +83,20 @@ def index_folder(folder):
         print(f"Skipped {skipped_count} file(s).")
 
 
+def make_excerpt(content, match_start, match_end, context=55):
+    start = max(0, match_start - context)
+    end = min(len(content), match_end + context)
+
+    excerpt = content[start:end].replace("\n", " ").strip()
+
+    if start > 0:
+        excerpt = "..." + excerpt
+    if end < len(content):
+        excerpt += "..."
+
+    return excerpt
+
+
 def search_documents():
     query = input("Enter a word or phrase to search for: ").strip()
 
@@ -89,25 +104,41 @@ def search_documents():
         print("Search text cannot be empty.")
         return
 
-    search_text = query.casefold()
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    results = []
 
     with sqlite3.connect(DATABASE_FILE) as connection:
         documents = connection.execute(
             "SELECT path, content FROM documents"
         ).fetchall()
 
-    matches = [
-        path for path, content in documents
-        if search_text in content.casefold()
-    ]
+    for path, content in documents:
+        matches = list(pattern.finditer(content))
 
-    if not matches:
+        if matches:
+            first_match = matches[0]
+            results.append({
+                "path": path,
+                "count": len(matches),
+                "excerpt": make_excerpt(
+                    content,
+                    first_match.start(),
+                    first_match.end()
+                )
+            })
+
+    if not results:
         print(f'No indexed documents contain "{query}".')
         return
 
-    print(f'\nFound "{query}" in {len(matches)} document(s):')
-    for path in matches:
-        print(f"- {path}")
+    results.sort(key=lambda result: (-result["count"], result["path"].lower()))
+
+    print(f'\nFound "{query}" in {len(results)} document(s):')
+
+    for number, result in enumerate(results, start=1):
+        print(f"\n{number}. {result['path']}")
+        print(f"   Matches: {result['count']}")
+        print(f"   Excerpt: {result['excerpt']}")
 
 
 def main():
