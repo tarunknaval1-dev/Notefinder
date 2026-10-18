@@ -10,6 +10,8 @@ NoteFinder is a small Python command-line app for finding information in local n
 - Store note file paths and contents in a local SQLite database
 - Index and refresh `.txt` and `.md` documents in SQLite
 - Search indexed notes by word or phrase
+- Rank search results by match count
+- Show a text excerpt around the first match
 
 ## Run the app
 
