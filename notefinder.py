@@ -97,11 +97,66 @@ def make_excerpt(content, match_start, match_end, context=55):
     return excerpt
 
 
+def choose_search_filter():
+    print("\nFilter results by:")
+    print("1. All indexed files")
+    print("2. Text files (.txt)")
+    print("3. Markdown files (.md)")
+    print("4. Folder")
+
+    choice = input("Choose a filter: ").strip()
+
+    if choice == "1":
+        return {"type": "all"}
+    if choice == "2":
+        return {"type": ".txt"}
+    if choice == "3":
+        return {"type": ".md"}
+    if choice == "4":
+        folder_input = input("Enter the folder path to search within: ").strip()
+
+        if not folder_input:
+            print("Folder path cannot be empty.")
+            return None
+
+        folder = Path(folder_input).expanduser()
+
+        if not folder.exists() or not folder.is_dir():
+            print("That folder does not exist or is not a folder.")
+            return None
+
+        return {"type": "folder", "path": folder.resolve()}
+
+    print("Please choose 1, 2, 3, or 4.")
+    return None
+
+
+def document_matches_filter(path, search_filter):
+    filter_type = search_filter["type"]
+    document_path = Path(path)
+
+    if filter_type in {".txt", ".md"}:
+        return document_path.suffix.lower() == filter_type
+
+    if filter_type == "folder":
+        try:
+            document_path.relative_to(search_filter["path"])
+            return True
+        except ValueError:
+            return False
+
+    return True
+
+
 def search_documents():
     query = input("Enter a word or phrase to search for: ").strip()
 
     if not query:
         print("Search text cannot be empty.")
+        return
+
+    search_filter = choose_search_filter()
+    if search_filter is None:
         return
 
     pattern = re.compile(re.escape(query), re.IGNORECASE)
@@ -113,6 +168,9 @@ def search_documents():
         ).fetchall()
 
     for path, content in documents:
+        if not document_matches_filter(path, search_filter):
+            continue
+
         matches = list(pattern.finditer(content))
 
         if matches:
@@ -128,7 +186,7 @@ def search_documents():
             })
 
     if not results:
-        print(f'No indexed documents contain "{query}".')
+        print(f'No indexed documents contain "{query}" for that filter.')
         return
 
     results.sort(key=lambda result: (-result["count"], result["path"].lower()))
