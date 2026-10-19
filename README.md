@@ -12,6 +12,7 @@ NoteFinder is a small Python command-line app for finding information in local n
 - Search indexed notes by word or phrase
 - Rank search results by match count
 - Show a text excerpt around the first match
+- Filter search results by file type or folder
 
 ## Run the app
 
