@@ -15,44 +15,65 @@ def choose_folder():
 
     folder = Path(folder_input).expanduser()
 
-    if not folder.exists():
-        print("That folder does not exist. Check the path and try again.")
+    try:
+        if not folder.exists():
+            print("That folder does not exist. Check the path and try again.")
+            return None
+
+        if not folder.is_dir():
+            print("Please enter a folder path, not a file path.")
+            return None
+
+        folder = folder.resolve()
+    except OSError as error:
+        print(f"Could not access that folder: {error}")
         return None
 
-    if not folder.is_dir():
-        print("Please enter a folder path, not a file path.")
-        return None
-
-    folder = folder.resolve()
     print(f"Folder selected: {folder}")
     return folder
 
 
 def create_database():
-    with sqlite3.connect(DATABASE_FILE) as connection:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS documents (
-                path TEXT PRIMARY KEY,
-                content TEXT NOT NULL
-            )
-        """)
+    try:
+        with sqlite3.connect(DATABASE_FILE) as connection:
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    path TEXT PRIMARY KEY,
+                    content TEXT NOT NULL
+                )
+            """)
+        return True
+    except sqlite3.Error as error:
+        print(f"Could not create or open the database: {error}")
+        return False
 
 
 def find_note_files(folder):
+    if not folder.exists() or not folder.is_dir():
+        print("The selected folder is no longer available. Please choose it again.")
+        return None
+
     note_files = []
 
     try:
         for path in folder.rglob("*"):
-            if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                note_files.append(path)
+            try:
+                if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    note_files.append(path)
+            except OSError as error:
+                print(f"Could not check {path}: {error}")
     except OSError as error:
-        print(f"Could not scan part of the folder: {error}")
+        print(f"Could not scan the folder: {error}")
+        return None
 
     return sorted(note_files, key=lambda path: str(path).lower())
 
 
 def index_folder(folder):
     note_files = find_note_files(folder)
+
+    if note_files is None:
+        return
 
     if not note_files:
         print("No .txt or .md files found.")
@@ -61,21 +82,25 @@ def index_folder(folder):
     saved_count = 0
     skipped_count = 0
 
-    with sqlite3.connect(DATABASE_FILE) as connection:
-        for path in note_files:
-            try:
-                content = path.read_text(encoding="utf-8")
-                connection.execute(
-                    """
-                    INSERT OR REPLACE INTO documents (path, content)
-                    VALUES (?, ?)
-                    """,
-                    (str(path.resolve()), content)
-                )
-                saved_count += 1
-            except (OSError, UnicodeError) as error:
-                print(f"Skipped {path.name}: {error}")
-                skipped_count += 1
+    try:
+        with sqlite3.connect(DATABASE_FILE) as connection:
+            for path in note_files:
+                try:
+                    content = path.read_text(encoding="utf-8")
+                    connection.execute(
+                        """
+                        INSERT OR REPLACE INTO documents (path, content)
+                        VALUES (?, ?)
+                        """,
+                        (str(path.resolve()), content)
+                    )
+                    saved_count += 1
+                except (OSError, UnicodeError) as error:
+                    print(f"Skipped {path.name}: {error}")
+                    skipped_count += 1
+    except sqlite3.Error as error:
+        print(f"Could not save documents to the database: {error}")
+        return
 
     print(f"\nFound {len(note_files)} note file(s).")
     print(f"Added or refreshed {saved_count} file(s) in the database.")
@@ -121,13 +146,16 @@ def choose_search_filter():
 
         folder = Path(folder_input).expanduser()
 
-        if not folder.exists() or not folder.is_dir():
-            print("That folder does not exist or is not a folder.")
+        try:
+            if not folder.exists() or not folder.is_dir():
+                print("That folder does not exist or is not a folder.")
+                return None
+            return {"type": "folder", "path": folder.resolve()}
+        except OSError as error:
+            print(f"Could not access that folder: {error}")
             return None
 
-        return {"type": "folder", "path": folder.resolve()}
-
-    print("Please choose 1, 2, 3, or 4.")
+    print("Invalid filter choice. Please choose 1, 2, 3, or 4.")
     return None
 
 
@@ -159,20 +187,28 @@ def search_documents():
     if search_filter is None:
         return
 
-    pattern = re.compile(re.escape(query), re.IGNORECASE)
-    results = []
+    try:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    except re.error as error:
+        print(f"Could not use that search phrase: {error}")
+        return
 
-    with sqlite3.connect(DATABASE_FILE) as connection:
-        documents = connection.execute(
-            "SELECT path, content FROM documents"
-        ).fetchall()
+    try:
+        with sqlite3.connect(DATABASE_FILE) as connection:
+            documents = connection.execute(
+                "SELECT path, content FROM documents"
+            ).fetchall()
+    except sqlite3.Error as error:
+        print(f"Could not search the database: {error}")
+        return
+
+    results = []
 
     for path, content in documents:
         if not document_matches_filter(path, search_filter):
             continue
 
         matches = list(pattern.finditer(content))
-
         if matches:
             first_match = matches[0]
             results.append({
@@ -200,7 +236,9 @@ def search_documents():
 
 
 def main():
-    create_database()
+    if not create_database():
+        return
+
     selected_folder = None
 
     while True:
@@ -216,7 +254,7 @@ def main():
             selected_folder = choose_folder()
         elif choice == "2":
             if selected_folder is None:
-                print("Choose a folder first.")
+                print("Choose a valid folder first.")
             else:
                 index_folder(selected_folder)
         elif choice == "3":
@@ -225,7 +263,7 @@ def main():
             print("Goodbye!")
             break
         else:
-            print("Please choose 1, 2, 3, or 4.")
+            print("Invalid menu option. Please choose 1, 2, 3, or 4.")
 
 
 if __name__ == "__main__":
