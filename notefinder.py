@@ -1,9 +1,25 @@
 import re
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 SUPPORTED_EXTENSIONS = {".txt", ".md"}
 DATABASE_FILE = Path(__file__).with_name("notefinder.db")
+
+
+@contextmanager
+def database_connection():
+    """Open the database and always close the connection when finished."""
+    connection = sqlite3.connect(DATABASE_FILE)
+
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def choose_folder():
@@ -35,7 +51,7 @@ def choose_folder():
 
 def create_database():
     try:
-        with sqlite3.connect(DATABASE_FILE) as connection:
+        with database_connection() as connection:
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS documents (
                     path TEXT PRIMARY KEY,
@@ -49,8 +65,12 @@ def create_database():
 
 
 def find_note_files(folder):
-    if not folder.exists() or not folder.is_dir():
-        print("The selected folder is no longer available. Please choose it again.")
+    try:
+        if not folder.exists() or not folder.is_dir():
+            print("The selected folder is no longer available. Please choose it again.")
+            return None
+    except OSError as error:
+        print(f"Could not access the selected folder: {error}")
         return None
 
     note_files = []
@@ -83,7 +103,7 @@ def index_folder(folder):
     skipped_count = 0
 
     try:
-        with sqlite3.connect(DATABASE_FILE) as connection:
+        with database_connection() as connection:
             for path in note_files:
                 try:
                     content = path.read_text(encoding="utf-8")
@@ -104,6 +124,7 @@ def index_folder(folder):
 
     print(f"\nFound {len(note_files)} note file(s).")
     print(f"Added or refreshed {saved_count} file(s) in the database.")
+
     if skipped_count:
         print(f"Skipped {skipped_count} file(s).")
 
@@ -116,6 +137,7 @@ def make_excerpt(content, match_start, match_end, context=55):
 
     if start > 0:
         excerpt = "..." + excerpt
+
     if end < len(content):
         excerpt += "..."
 
@@ -133,10 +155,13 @@ def choose_search_filter():
 
     if choice == "1":
         return {"type": "all"}
+
     if choice == "2":
         return {"type": ".txt"}
+
     if choice == "3":
         return {"type": ".md"}
+
     if choice == "4":
         folder_input = input("Enter the folder path to search within: ").strip()
 
@@ -150,6 +175,7 @@ def choose_search_filter():
             if not folder.exists() or not folder.is_dir():
                 print("That folder does not exist or is not a folder.")
                 return None
+
             return {"type": "folder", "path": folder.resolve()}
         except OSError as error:
             print(f"Could not access that folder: {error}")
@@ -184,17 +210,14 @@ def search_documents():
         return
 
     search_filter = choose_search_filter()
+
     if search_filter is None:
         return
 
-    try:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
-    except re.error as error:
-        print(f"Could not use that search phrase: {error}")
-        return
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
 
     try:
-        with sqlite3.connect(DATABASE_FILE) as connection:
+        with database_connection() as connection:
             documents = connection.execute(
                 "SELECT path, content FROM documents"
             ).fetchall()
@@ -209,6 +232,7 @@ def search_documents():
             continue
 
         matches = list(pattern.finditer(content))
+
         if matches:
             first_match = matches[0]
             results.append({
