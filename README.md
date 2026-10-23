@@ -46,7 +46,7 @@ Re-index a folder after changing notes so searches use the updated content.
 
 - Supports `.txt` and `.md` files only.
 - Searches for the words or phrases you enter; it does not find related terms.
-- Re-indexing updates found files but does not remove database entries for files that were deleted or moved.
+- Re-indexing updates found files but does not remove database entries for files that deleted or moved.
 - This version runs in the terminal and has no graphical interface.
 
 ## Project structure
